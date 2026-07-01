@@ -1,5 +1,6 @@
 ﻿#include <fstream>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -48,7 +49,7 @@ public:
         }
         else if (input.find("메모리") != std::string::npos)
         {
-            return "메모리는 프로그램이 값을 저장하고 사용하는 공간입니다. 포인터와 동적 할당은 나중 단계에서 다룹니다.";
+            return "메모리는 프로그램이 값을 저장하고 사용하는 공간입니다. /memory 명령어로 예제를 볼 수 있습니다.";
         }
         else if (input.find("알고리즘") != std::string::npos)
         {
@@ -186,6 +187,10 @@ public:
             historyManager.clearHistory();
             std::cout << "대화 기록을 삭제했습니다." << std::endl;
         }
+        else if (input == "/memory")
+        {
+            demonstrateMemoryConcepts();
+        }
         else if (input == "/exit")
         {
             historyManager.saveHistory();
@@ -207,7 +212,117 @@ private:
         std::cout << "/help    : 사용 가능한 명령어를 보여줍니다." << std::endl;
         std::cout << "/history : 대화 기록을 보여줍니다." << std::endl;
         std::cout << "/clear   : 대화 기록을 삭제합니다." << std::endl;
+        std::cout << "/memory  : 메모리 개념 학습 예제를 보여줍니다." << std::endl;
         std::cout << "/exit    : 프로그램을 종료합니다." << std::endl;
+    }
+
+    void demonstrateMemoryConcepts()
+    {
+        std::cout << "메모리 개념 학습 예제" << std::endl;
+        std::cout << "이번 예제는 채팅 기능을 바꾸지 않고 C++ 메모리 개념만 관찰합니다." << std::endl;
+
+        demonstratePassByValue();
+        demonstratePassByReference();
+        demonstratePointerBasic();
+        demonstrateDynamicAllocation();
+        demonstrateSmartPointer();
+        demonstrateVectorMemory();
+    }
+
+    // 값 전달: 복사본이 전달되므로 원본 Message는 바뀌지 않습니다.
+    void demonstratePassByValue()
+    {
+        std::cout << std::endl;
+        std::cout << "[1] 값 전달 예시" << std::endl;
+
+        Message original("User", "원본 메시지");
+        Message copiedMessage = original;
+        copiedMessage.text = "복사본만 수정됨";
+
+        std::cout << "원본 text: " << original.text << std::endl;
+        std::cout << "복사본 text: " << copiedMessage.text << std::endl;
+        std::cout << "값 전달에서는 복사본이 바뀌어도 원본은 그대로입니다." << std::endl;
+    }
+
+    // 참조 전달: 같은 객체를 다른 이름으로 사용하므로 원본이 바뀔 수 있습니다.
+    void demonstratePassByReference()
+    {
+        std::cout << std::endl;
+        std::cout << "[2] 참조 전달 예시" << std::endl;
+
+        Message original("User", "수정 전 메시지");
+        Message& referenceMessage = original;
+        referenceMessage.text = "참조를 통해 수정됨";
+
+        std::cout << "원본 text: " << original.text << std::endl;
+        std::cout << "참조 text: " << referenceMessage.text << std::endl;
+        std::cout << "참조는 원본을 직접 가리키므로 원본 값이 바뀔 수 있습니다." << std::endl;
+    }
+
+    // 포인터 기본: 객체의 주소를 저장하고, -> 연산자로 값을 읽습니다.
+    void demonstratePointerBasic()
+    {
+        std::cout << std::endl;
+        std::cout << "[3] 포인터 기본 예시" << std::endl;
+
+        Message message("AI", "포인터가 가리키는 메시지");
+        Message* messagePointer = &message;
+
+        std::cout << "Message 객체 주소: " << &message << std::endl;
+        std::cout << "포인터에 저장된 주소: " << messagePointer << std::endl;
+        std::cout << "포인터로 읽은 text: " << messagePointer->text << std::endl;
+    }
+
+    // 동적 할당: new로 만든 객체는 delete로 직접 해제해야 합니다.
+    void demonstrateDynamicAllocation()
+    {
+        std::cout << std::endl;
+        std::cout << "[4] 동적 할당 예시" << std::endl;
+
+        Message* dynamicMessage = new Message("AI", "new로 만든 메시지");
+
+        std::cout << "동적 할당 주소: " << dynamicMessage << std::endl;
+        std::cout << "동적 할당 text: " << dynamicMessage->text << std::endl;
+        std::cout << "new를 사용하면 delete를 빼먹을 때 메모리 누수가 생길 수 있습니다." << std::endl;
+
+        delete dynamicMessage;
+        dynamicMessage = nullptr;
+
+        std::cout << "delete 후 포인터를 nullptr로 바꾸었습니다." << std::endl;
+    }
+
+    // 스마트 포인터: unique_ptr은 범위를 벗어날 때 자동으로 메모리를 해제합니다.
+    void demonstrateSmartPointer()
+    {
+        std::cout << std::endl;
+        std::cout << "[5] 스마트 포인터 예시" << std::endl;
+
+        std::unique_ptr<Message> smartMessage(new Message("AI", "unique_ptr이 관리하는 메시지"));
+
+        std::cout << "unique_ptr 주소: " << smartMessage.get() << std::endl;
+        std::cout << "unique_ptr text: " << smartMessage->text << std::endl;
+        std::cout << "이 함수가 끝나면 unique_ptr이 자동으로 delete를 처리합니다." << std::endl;
+    }
+
+    // vector 메모리: size는 실제 원소 수, capacity는 미리 확보한 저장 공간입니다.
+    void demonstrateVectorMemory()
+    {
+        std::cout << std::endl;
+        std::cout << "[6] vector 크기와 capacity 관찰 예시" << std::endl;
+
+        std::vector<Message> messages;
+
+        std::cout << "처음 size: " << messages.size() << ", capacity: " << messages.capacity() << std::endl;
+
+        messages.push_back(Message("User", "첫 번째 메시지"));
+        std::cout << "1개 추가 후 size: " << messages.size() << ", capacity: " << messages.capacity() << std::endl;
+
+        messages.push_back(Message("AI", "두 번째 메시지"));
+        std::cout << "2개 추가 후 size: " << messages.size() << ", capacity: " << messages.capacity() << std::endl;
+
+        messages.push_back(Message("User", "세 번째 메시지"));
+        std::cout << "3개 추가 후 size: " << messages.size() << ", capacity: " << messages.capacity() << std::endl;
+        std::cout << "capacity는 vector가 내부 저장 공간을 늘릴 때 바뀔 수 있습니다." << std::endl;
     }
 };
 
@@ -254,8 +369,9 @@ private:
 
     void printWelcomeMessage()
     {
-        std::cout << "LocalAIChat 7단계 기본 채팅 프로그램" << std::endl;
+        std::cout << "LocalAIChat 8단계 기본 채팅 프로그램" << std::endl;
         std::cout << "문장을 입력하면 간단한 규칙으로 응답합니다." << std::endl;
+        std::cout << "메모리 학습 예제를 보려면 /memory를 입력하세요." << std::endl;
         std::cout << "사용 가능한 명령어를 보려면 /help를 입력하세요." << std::endl;
         std::cout << "종료하려면 /exit를 입력하세요." << std::endl;
         std::cout << std::endl;
