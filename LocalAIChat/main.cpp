@@ -1,6 +1,9 @@
-﻿#include <iostream>
+﻿#include <fstream>
+#include <iostream>
 #include <string>
 #include <vector>
+
+const std::string HISTORY_FILE_NAME = "chat_history.txt";
 
 struct Message
 {
@@ -17,11 +20,14 @@ void printBotResponse(std::string response);
 void addMessage(std::vector<Message>& chatHistory, std::string speaker, std::string text);
 void printChatHistory(std::vector<Message> chatHistory);
 void printHelp();
+void saveHistory(std::vector<Message> chatHistory);
+void loadHistory(std::vector<Message>& chatHistory);
 
 int main()
 {
     std::vector<Message> chatHistory;
 
+    loadHistory(chatHistory);
     printWelcomeMessage();
 
     while (true)
@@ -52,7 +58,7 @@ int main()
 
 void printWelcomeMessage()
 {
-    std::cout << "LocalAIChat 5단계 기본 채팅 프로그램" << std::endl;
+    std::cout << "LocalAIChat 6단계 기본 채팅 프로그램" << std::endl;
     std::cout << "문장을 입력하면 간단한 규칙으로 응답합니다." << std::endl;
     std::cout << "사용 가능한 명령어를 보려면 /help를 입력하세요." << std::endl;
     std::cout << "종료하려면 /exit를 입력하세요." << std::endl;
@@ -87,10 +93,12 @@ bool handleCommand(std::string input, std::vector<Message>& chatHistory)
     else if (input == "/clear")
     {
         chatHistory.clear();
+        saveHistory(chatHistory);
         std::cout << "대화 기록을 삭제했습니다." << std::endl;
     }
     else if (input == "/exit")
     {
+        saveHistory(chatHistory);
         printBotResponse("프로그램을 종료합니다.");
         return true;
     }
@@ -178,4 +186,56 @@ void printHelp()
     std::cout << "/history : 대화 기록을 보여줍니다." << std::endl;
     std::cout << "/clear   : 대화 기록을 삭제합니다." << std::endl;
     std::cout << "/exit    : 프로그램을 종료합니다." << std::endl;
+}
+
+void saveHistory(std::vector<Message> chatHistory)
+{
+    std::ofstream outputFile(HISTORY_FILE_NAME);
+
+    if (!outputFile)
+    {
+        std::cout << "대화 기록 파일을 저장할 수 없습니다." << std::endl;
+        return;
+    }
+
+    // 한 줄에 화자와 내용을 구분해서 저장합니다. 예: User|안녕
+    for (Message message : chatHistory)
+    {
+        outputFile << message.speaker << "|" << message.text << std::endl;
+    }
+}
+
+void loadHistory(std::vector<Message>& chatHistory)
+{
+    std::ifstream inputFile(HISTORY_FILE_NAME);
+
+    if (!inputFile)
+    {
+        // 파일이 없으면 오류가 아니라 새 대화 기록으로 시작합니다.
+        return;
+    }
+
+    std::string line;
+
+    while (std::getline(inputFile, line))
+    {
+        std::size_t separatorPosition = line.find("|");
+
+        if (separatorPosition == std::string::npos)
+        {
+            std::cout << "읽을 수 없는 대화 기록 한 줄을 건너뜁니다." << std::endl;
+        }
+        else
+        {
+            Message message;
+            message.speaker = line.substr(0, separatorPosition);
+            message.text = line.substr(separatorPosition + 1);
+            chatHistory.push_back(message);
+        }
+    }
+
+    if (inputFile.bad())
+    {
+        std::cout << "대화 기록 파일을 불러오는 중 문제가 발생했습니다." << std::endl;
+    }
 }
