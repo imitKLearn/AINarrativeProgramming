@@ -10,12 +10,13 @@ struct Message
 
 void printWelcomeMessage();
 std::string getUserInput();
-bool isExitCommand(std::string input);
-bool isHistoryRequest(std::string input);
+bool isCommand(std::string input);
+bool handleCommand(std::string input, std::vector<Message>& chatHistory);
 std::string getResponse(std::string input);
 void printBotResponse(std::string response);
 void addMessage(std::vector<Message>& chatHistory, std::string speaker, std::string text);
 void printChatHistory(std::vector<Message> chatHistory);
+void printHelp();
 
 int main()
 {
@@ -27,15 +28,14 @@ int main()
     {
         std::string input = getUserInput();
 
-        if (isExitCommand(input))
+        if (isCommand(input))
         {
-            printBotResponse("프로그램을 종료합니다.");
-            break;
-        }
+            bool shouldExit = handleCommand(input, chatHistory);
 
-        if (isHistoryRequest(input))
-        {
-            printChatHistory(chatHistory);
+            if (shouldExit)
+            {
+                break;
+            }
         }
         else
         {
@@ -52,10 +52,10 @@ int main()
 
 void printWelcomeMessage()
 {
-    std::cout << "LocalAIChat 3단계 기본 채팅 프로그램" << std::endl;
+    std::cout << "LocalAIChat 4단계 기본 채팅 프로그램" << std::endl;
     std::cout << "문장을 입력하면 간단한 규칙으로 응답합니다." << std::endl;
-    std::cout << "대화 기록을 보려면 기록 또는 history를 입력하세요." << std::endl;
-    std::cout << "종료하려면 exit를 입력하세요." << std::endl;
+    std::cout << "사용 가능한 명령어를 보려면 /help를 입력하세요." << std::endl;
+    std::cout << "종료하려면 /exit를 입력하세요." << std::endl;
     std::cout << std::endl;
 }
 
@@ -69,14 +69,37 @@ std::string getUserInput()
     return input;
 }
 
-bool isExitCommand(std::string input)
+bool isCommand(std::string input)
 {
-    return input == "exit";
+    return input.length() > 0 && input[0] == '/';
 }
 
-bool isHistoryRequest(std::string input)
+bool handleCommand(std::string input, std::vector<Message>& chatHistory)
 {
-    return input == "기록" || input == "history";
+    if (input == "/help")
+    {
+        printHelp();
+    }
+    else if (input == "/history")
+    {
+        printChatHistory(chatHistory);
+    }
+    else if (input == "/clear")
+    {
+        chatHistory.clear();
+        std::cout << "대화 기록을 삭제했습니다." << std::endl;
+    }
+    else if (input == "/exit")
+    {
+        printBotResponse("프로그램을 종료합니다.");
+        return true;
+    }
+    else
+    {
+        std::cout << "알 수 없는 명령어입니다. /help를 입력해보세요." << std::endl;
+    }
+
+    return false;
 }
 
 std::string getResponse(std::string input)
@@ -92,7 +115,7 @@ std::string getResponse(std::string input)
     }
     else if (input.find("도움") != std::string::npos)
     {
-        return "사용할 수 있는 입력 예시는 안녕, C++, 도움, 기록, history, exit입니다.";
+        return "사용할 수 있는 입력 예시는 안녕, C++, 도움입니다. 명령어는 /help를 입력해 확인하세요.";
     }
 
     return "아직은 간단한 규칙으로만 대답할 수 있어요. '도움'을 입력해보세요.";
@@ -126,4 +149,13 @@ void printChatHistory(std::vector<Message> chatHistory)
     {
         std::cout << message.speaker << ": " << message.text << std::endl;
     }
+}
+
+void printHelp()
+{
+    std::cout << "사용 가능한 명령어" << std::endl;
+    std::cout << "/help    : 사용 가능한 명령어를 보여줍니다." << std::endl;
+    std::cout << "/history : 대화 기록을 보여줍니다." << std::endl;
+    std::cout << "/clear   : 대화 기록을 삭제합니다." << std::endl;
+    std::cout << "/exit    : 프로그램을 종료합니다." << std::endl;
 }
