@@ -3,8 +3,17 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <windows.h>
+#include <winhttp.h>
+
+#pragma comment(lib, "winhttp.lib")
 
 const std::string HISTORY_FILE_NAME = "chat_history.txt";
+const std::string OLLAMA_MODEL_NAME = "llama3.2";
+const std::string OLLAMA_BASE_URL = "http://localhost:11434";
+const std::wstring OLLAMA_HOST = L"localhost";
+const INTERNET_PORT OLLAMA_PORT = 11434;
+const std::wstring OLLAMA_GENERATE_PATH = L"/api/generate";
 
 // Message는 대화 한 줄의 화자와 내용을 저장하는 단순한 데이터 클래스입니다.
 class Message
@@ -24,11 +33,107 @@ public:
     std::string text;
 };
 
-// ChatBot은 사용자 입력을 보고 규칙 기반 답변을 만드는 역할을 합니다.
+// ChatBot은 사용자 입력을 보고 로컬 AI 응답 또는 규칙 기반 답변을 만드는 역할을 합니다.
 class ChatBot
 {
 public:
     std::string getResponse(std::string input)
+    {
+        std::string localAIResponse;
+
+        if (requestLocalAI(input, localAIResponse))
+        {
+            return localAIResponse;
+        }
+
+        std::cout << "로컬 AI 응답을 받지 못해 규칙 기반 응답을 사용합니다." << std::endl;
+        return getRuleBasedResponse(input);
+    }
+
+private:
+    bool requestLocalAI(std::string input, std::string& aiResponse)
+    {
+        HINTERNET session = nullptr;
+        HINTERNET connection = nullptr;
+        HINTERNET request = nullptr;
+        bool success = false;
+
+        session = WinHttpOpen(
+            L"LocalAIChat/1.0",
+            WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
+            WINHTTP_NO_PROXY_NAME,
+            WINHTTP_NO_PROXY_BYPASS,
+            0);
+
+        if (session == nullptr)
+        {
+            return false;
+        }
+
+        WinHttpSetTimeouts(session, 3000, 3000, 3000, 10000);
+
+        connection = WinHttpConnect(session, OLLAMA_HOST.c_str(), OLLAMA_PORT, 0);
+
+        if (connection != nullptr)
+        {
+            request = WinHttpOpenRequest(
+                connection,
+                L"POST",
+                OLLAMA_GENERATE_PATH.c_str(),
+                nullptr,
+                WINHTTP_NO_REFERER,
+                WINHTTP_DEFAULT_ACCEPT_TYPES,
+                0);
+        }
+
+        if (request != nullptr)
+        {
+            std::string requestJson = createOllamaRequestJson(input);
+            std::wstring headers = L"Content-Type: application/json\r\n";
+
+            // Ollama /api/generate에 JSON 문자열을 POST로 보냅니다.
+            BOOL sendResult = WinHttpSendRequest(
+                request,
+                headers.c_str(),
+                static_cast<DWORD>(headers.length()),
+                reinterpret_cast<LPVOID>(&requestJson[0]),
+                static_cast<DWORD>(requestJson.length()),
+                static_cast<DWORD>(requestJson.length()),
+                0);
+
+            if (sendResult && WinHttpReceiveResponse(request, nullptr))
+            {
+                std::string responseJson;
+
+                if (readHttpResponse(request, responseJson))
+                {
+                    std::string extractedResponse = extractResponseFromJson(responseJson);
+
+                    if (!extractedResponse.empty())
+                    {
+                        aiResponse = convertUtf8ToLocalText(extractedResponse);
+                        success = true;
+                    }
+                }
+            }
+        }
+
+        if (request != nullptr)
+        {
+            WinHttpCloseHandle(request);
+        }
+
+        if (connection != nullptr)
+        {
+            WinHttpCloseHandle(connection);
+        }
+
+        WinHttpCloseHandle(session);
+
+        return success;
+    }
+
+    std::string getRuleBasedResponse(std::string input)
     {
         // 여러 키워드가 들어 있어도 위에서부터 먼저 발견된 규칙 하나만 선택합니다.
         if (input.find("안녕") != std::string::npos)
@@ -61,10 +166,205 @@ public:
         }
         else if (input.find("도움") != std::string::npos)
         {
-            return "사용할 수 있는 키워드는 안녕, C++, 문법, 자료구조, 메모리, 알고리즘, 프로그램 구조, 도움입니다. 명령어는 /help를 입력해 확인하세요.";
+            return "사용할 수 있는 키워드는 안녕, C++, 문법, 자료구조, 메모리, 알고리즘, 프로그램 구조, 도움입니다. 로컬 AI는 Ollama가 켜져 있으면 자동으로 먼저 사용됩니다.";
         }
 
-        return "아직 아는 키워드가 아니에요. '도움'을 입력하면 사용할 수 있는 키워드를 볼 수 있습니다.";
+        return "아직 아는 키워드가 아니에요. Ollama가 켜져 있지 않다면 '도움'을 입력해 규칙 기반 키워드를 확인해보세요.";
+    }
+
+    std::string createOllamaRequestJson(std::string input)
+    {
+        std::string utf8Prompt = convertLocalTextToUtf8(input);
+
+        // JSON은 큰따옴표와 역슬래시를 특별하게 다루므로, prompt 문자열을 먼저 안전하게 바꿉니다.
+        std::string escapedPrompt = escapeJsonString(utf8Prompt);
+
+        return "{\"model\":\"" + OLLAMA_MODEL_NAME + "\",\"prompt\":\"" + escapedPrompt + "\",\"stream\":false}";
+    }
+
+    std::string escapeJsonString(std::string text)
+    {
+        std::string escapedText;
+
+        for (char character : text)
+        {
+            if (character == '\\')
+            {
+                escapedText += "\\\\";
+            }
+            else if (character == '"')
+            {
+                escapedText += "\\\"";
+            }
+            else if (character == '\n')
+            {
+                escapedText += "\\n";
+            }
+            else if (character == '\r')
+            {
+                escapedText += "\\r";
+            }
+            else if (character == '\t')
+            {
+                escapedText += "\\t";
+            }
+            else
+            {
+                escapedText += character;
+            }
+        }
+
+        return escapedText;
+    }
+
+    bool readHttpResponse(HINTERNET request, std::string& responseText)
+    {
+        DWORD bytesAvailable = 0;
+
+        do
+        {
+            if (!WinHttpQueryDataAvailable(request, &bytesAvailable))
+            {
+                return false;
+            }
+
+            if (bytesAvailable == 0)
+            {
+                break;
+            }
+
+            std::vector<char> buffer(bytesAvailable);
+            DWORD bytesRead = 0;
+
+            if (!WinHttpReadData(request, buffer.data(), bytesAvailable, &bytesRead))
+            {
+                return false;
+            }
+
+            responseText.append(buffer.data(), bytesRead);
+        } while (bytesAvailable > 0);
+
+        return !responseText.empty();
+    }
+
+    std::string extractResponseFromJson(std::string responseJson)
+    {
+        std::string key = "\"response\"";
+        std::size_t keyPosition = responseJson.find(key);
+
+        if (keyPosition == std::string::npos)
+        {
+            return "";
+        }
+
+        std::size_t colonPosition = responseJson.find(":", keyPosition + key.length());
+
+        if (colonPosition == std::string::npos)
+        {
+            return "";
+        }
+
+        std::size_t quotePosition = responseJson.find("\"", colonPosition + 1);
+
+        if (quotePosition == std::string::npos)
+        {
+            return "";
+        }
+
+        std::string extractedText;
+        bool isEscaped = false;
+
+        // 복잡한 JSON 파서 대신 response 문자열 안의 내용만 단순하게 읽습니다.
+        for (std::size_t index = quotePosition + 1; index < responseJson.length(); index++)
+        {
+            char character = responseJson[index];
+
+            if (isEscaped)
+            {
+                if (character == 'n')
+                {
+                    extractedText += '\n';
+                }
+                else if (character == 'r')
+                {
+                    extractedText += '\r';
+                }
+                else if (character == 't')
+                {
+                    extractedText += '\t';
+                }
+                else
+                {
+                    extractedText += character;
+                }
+
+                isEscaped = false;
+            }
+            else if (character == '\\')
+            {
+                isEscaped = true;
+            }
+            else if (character == '"')
+            {
+                return extractedText;
+            }
+            else
+            {
+                extractedText += character;
+            }
+        }
+
+        return "";
+    }
+
+    std::string convertLocalTextToUtf8(std::string text)
+    {
+        int wideSize = MultiByteToWideChar(CP_ACP, 0, text.c_str(), -1, nullptr, 0);
+
+        if (wideSize <= 0)
+        {
+            return text;
+        }
+
+        std::vector<wchar_t> wideText(wideSize);
+        MultiByteToWideChar(CP_ACP, 0, text.c_str(), -1, wideText.data(), wideSize);
+
+        int utf8Size = WideCharToMultiByte(CP_UTF8, 0, wideText.data(), -1, nullptr, 0, nullptr, nullptr);
+
+        if (utf8Size <= 0)
+        {
+            return text;
+        }
+
+        std::vector<char> utf8Text(utf8Size);
+        WideCharToMultiByte(CP_UTF8, 0, wideText.data(), -1, utf8Text.data(), utf8Size, nullptr, nullptr);
+
+        return std::string(utf8Text.data());
+    }
+
+    std::string convertUtf8ToLocalText(std::string text)
+    {
+        int wideSize = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
+
+        if (wideSize <= 0)
+        {
+            return text;
+        }
+
+        std::vector<wchar_t> wideText(wideSize);
+        MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, wideText.data(), wideSize);
+
+        int localSize = WideCharToMultiByte(CP_ACP, 0, wideText.data(), -1, nullptr, 0, nullptr, nullptr);
+
+        if (localSize <= 0)
+        {
+            return text;
+        }
+
+        std::vector<char> localText(localSize);
+        WideCharToMultiByte(CP_ACP, 0, wideText.data(), -1, localText.data(), localSize, nullptr, nullptr);
+
+        return std::string(localText.data());
     }
 };
 
@@ -214,6 +514,7 @@ private:
         std::cout << "/clear   : 대화 기록을 삭제합니다." << std::endl;
         std::cout << "/memory  : 메모리 개념 학습 예제를 보여줍니다." << std::endl;
         std::cout << "/exit    : 프로그램을 종료합니다." << std::endl;
+        std::cout << "일반 대화는 Ollama(" << OLLAMA_BASE_URL << ")를 먼저 시도하고 실패하면 규칙 기반 응답을 사용합니다." << std::endl;
     }
 
     void demonstrateMemoryConcepts()
@@ -369,8 +670,9 @@ private:
 
     void printWelcomeMessage()
     {
-        std::cout << "LocalAIChat 8단계 기본 채팅 프로그램" << std::endl;
-        std::cout << "문장을 입력하면 간단한 규칙으로 응답합니다." << std::endl;
+        std::cout << "LocalAIChat 9단계 기본 채팅 프로그램" << std::endl;
+        std::cout << "일반 대화는 Ollama 로컬 AI를 먼저 시도하고, 실패하면 규칙 기반 응답을 사용합니다." << std::endl;
+        std::cout << "Ollama 기본 주소: " << OLLAMA_BASE_URL << ", 모델: " << OLLAMA_MODEL_NAME << std::endl;
         std::cout << "메모리 학습 예제를 보려면 /memory를 입력하세요." << std::endl;
         std::cout << "사용 가능한 명령어를 보려면 /help를 입력하세요." << std::endl;
         std::cout << "종료하려면 /exit를 입력하세요." << std::endl;
